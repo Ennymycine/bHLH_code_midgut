@@ -3,3 +3,4 @@
 *.gz
 *.xlsx
 *.feather
+.Rproj.user

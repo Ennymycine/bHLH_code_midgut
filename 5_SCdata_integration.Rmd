@@ -78,6 +78,7 @@ databringr(from = 'http://genomics.essex.ac.uk/flygut/integrated_Hung2020.rds',
 
 # load data
 data1 <- readRDS(file.path("input", "integrated_Hung2020.rds"))
+data1 <- UpdateSeuratObject(object = data1)
 as.data.frame.table(table((data1)$technology)) %>%
   dplyr::rename(celltype=Var1, ncells=Freq) %>%
   knitr::kable()
@@ -202,7 +203,16 @@ p2
 
 We use the `Seurat::IntegrateData` function to integrate based on sample (independent experiments by technology). The algorithm identifies anchors, which are pairs of cross-datasets of cells that are in a compatible biological state, correcting for batch effects.
 
+> Following recommendations from [Biostars/SO](https://www.biostars.org/p/432389/), in Terminal:
+> `>cd ~`
+> `>touch .Renviron`
+> `>open .Renviron`
+> Save the following as the first line of .Renviron:
+> `R_MAX_VSIZE = 100Gb`
+
 ```{r integration}
+options(future.globals.maxSize = 3 * 1024^3) # to avoid Error in getGlobalsAndPackages with 1.00 GiB.
+
 if (file.exists( file.path(outpath, 'alldata-int-cache1.rds') )) {
   alldata.int <- readRDS( file.path(outpath, 'alldata-int-cache1.rds') )
 } else {
@@ -295,9 +305,12 @@ knitr::kable(markers)
 # set integrated clustering as cell identity
 Idents(alldata.int) <- alldata.int@meta.data$CCA_snn_res.1
 # get genome-wide gene expression per cluster, and visualise for marker genes
-cluster.averages <- AverageExpression(alldata.int, return.seurat=TRUE, add.ident="sample")
-DoHeatmap(cluster.averages, features=head(markers, 20)$genes, size=2)
-DoHeatmap(cluster.averages, features=tail(markers, 21)$genes, size=2)
+cluster.averages <- AverageExpression(alldata.int, return.seurat=TRUE, group.by=c('ident', 'sample'), assays='RNA')
+DoHeatmap(cluster.averages, features=head(markers, 20)$genes,
+          draw.lines = FALSE, size=1) + theme(legend.position="none")
+DoHeatmap(cluster.averages, features=tail(markers, 21)$genes,
+          group.by=c('ident'),
+          draw.lines = FALSE, size=1) + theme(legend.position="none")
 ```
 
 ## Annotation of clusters
@@ -328,7 +341,7 @@ celltype <- case_when(
 alldata.int@meta.data$integrated_celltype <- celltype
 Idents(alldata.int) <- alldata.int@meta.data$integrated_celltype
 # get genome-wide gene expression per cluster, and visualise
-integratedcelltype.averages <- AverageExpression(alldata.int, return.seurat=TRUE)
+integratedcelltype.averages <- AverageExpression(alldata.int, return.seurat=TRUE, assays='RNA')
 DoHeatmap(integratedcelltype.averages, features=markers$genes, size=2)
 DimPlot(alldata.int, group.by="integrated_celltype", label=TRUE)
 DimPlot(alldata.int, group.by="integrated_celltype", label=TRUE, reduction = "pca")
@@ -353,9 +366,13 @@ table(Idents(isc_cluster) )
 # evaluate marker expression in clusters
 isc <- c("Dl", "Smvt", "sna", "polo", "stf", "cnn")
 eb <- c("klu", "E(spl)m3-HLH", "E(spl)malpha-BFM", "E(spl)mbeta-HLH")
-cluster.averages <- AverageExpression(isc_cluster, return.seurat=TRUE, add.ident="sample")
-DoHeatmap(cluster.averages, features=isc, size=2)
-DoHeatmap(cluster.averages, features=eb, size=2)
+cluster.averages <- AverageExpression(isc_cluster, return.seurat=TRUE, group.by=c('integrated_celltype', 'sample'), assays='RNA')
+DoHeatmap(cluster.averages, features=isc,
+          group.by=c('integrated_celltype', 'sample'),
+          draw.lines = TRUE, size=3) + theme(legend.position="none")
+DoHeatmap(cluster.averages, features=eb,
+          group.by=c('integrated_celltype', 'sample'),
+          draw.lines = TRUE, size=3) + theme(legend.position="none")
 ```
 
 With this, we can now separate ISCs and EBs:
